@@ -72,13 +72,25 @@ class PrivilegedExecutor(private val context: Context) {
     }
 
     private fun checkShizukuActive(): Boolean {
-        // Shizuku operates primarily through a system binder. We check if the package
-        // or helper command-line is accessible, simulating real-world check.
         return try {
-            val process = Runtime.getRuntime().exec("sh -c command -v shizuku")
-            val exitCode = process.waitFor()
-            process.destroy()
-            exitCode == 0
+            rikka.shizuku.Shizuku.pingBinder() && 
+                    rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun isShizukuInstalledAndRunning(): Boolean {
+        return try {
+            rikka.shizuku.Shizuku.pingBinder()
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun hasShizukuPermission(): Boolean {
+        return try {
+            rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
         } catch (e: Exception) {
             false
         }
@@ -102,19 +114,25 @@ class PrivilegedExecutor(private val context: Context) {
         }
 
         try {
-            val processedCommand = when (mode) {
-                PrivilegeMode.ROOT -> arrayOf("su", "-c", command)
+            val process = when (mode) {
+                PrivilegeMode.ROOT -> Runtime.getRuntime().exec(arrayOf("su", "-c", command))
                 PrivilegeMode.SHIZUKU -> {
-                    // Shizuku commands are typically run through rish or helper binaries
-                    arrayOf("sh", "-c", "shizuku_run $command 2>/dev/null || $command")
+                    try {
+                        val shizukuClass = Class.forName("rikka.shizuku.Shizuku")
+                        val newProcessMethod = shizukuClass.getDeclaredMethod(
+                            "newProcess",
+                            Array<String>::class.java,
+                            Array<String>::class.java,
+                            String::class.java
+                        )
+                        newProcessMethod.isAccessible = true
+                        newProcessMethod.invoke(null, arrayOf("sh", "-c", command), null, null) as java.lang.Process
+                    } catch (e: Exception) {
+                        Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
+                    }
                 }
-                PrivilegeMode.LIMITED -> {
-                    // Fallback to basic standard user shell
-                    arrayOf("sh", "-c", command)
-                }
+                PrivilegeMode.LIMITED -> Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
             }
-
-            val process = Runtime.getRuntime().exec(processedCommand)
             
             val outputBuilder = StringBuilder()
             val errorBuilder = StringBuilder()

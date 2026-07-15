@@ -47,6 +47,12 @@ class OptimizerViewModel(application: Application) : AndroidViewModel(applicatio
     private val _privilegeMode = MutableStateFlow(PrivilegeMode.LIMITED)
     val privilegeMode: StateFlow<PrivilegeMode> = _privilegeMode.asStateFlow()
 
+    private val _isShizukuRunning = MutableStateFlow(false)
+    val isShizukuRunning: StateFlow<Boolean> = _isShizukuRunning.asStateFlow()
+
+    private val _hasShizukuPermission = MutableStateFlow(false)
+    val hasShizukuPermission: StateFlow<Boolean> = _hasShizukuPermission.asStateFlow()
+
     private val _aiState = MutableStateFlow<AIState>(AIState.Idle)
     val aiState: StateFlow<AIState> = _aiState.asStateFlow()
 
@@ -71,6 +77,18 @@ class OptimizerViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             val mode = repository.detectHighestPrivilegeMode()
             _privilegeMode.value = mode
+            _isShizukuRunning.value = repository.isShizukuInstalledAndRunning()
+            _hasShizukuPermission.value = repository.hasShizukuPermission()
+        }
+    }
+
+    fun requestShizukuPermission() {
+        try {
+            if (repository.isShizukuInstalledAndRunning()) {
+                rikka.shizuku.Shizuku.requestPermission(1001)
+            }
+        } catch (e: Exception) {
+            // Log or handle gracefully
         }
     }
 

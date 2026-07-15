@@ -343,4 +343,12 @@ class OptimizerRepository(private val context: Context) {
     suspend fun detectHighestPrivilegeMode(): PrivilegeMode {
         return executor.detectPrivilegeMode()
     }
+
+    fun isShizukuInstalledAndRunning(): Boolean {
+        return executor.isShizukuInstalledAndRunning()
+    }
+
+    fun hasShizukuPermission(): Boolean {
+        return executor.hasShizukuPermission()
+    }
 }

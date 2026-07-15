@@ -63,8 +63,24 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class MainActivity : ComponentActivity() {
+
+    private var onPermissionResult: (() -> Unit)? = null
+
+    fun setOnPermissionResultCallback(callback: (() -> Unit)?) {
+        onPermissionResult = callback
+    }
+
+    private val permissionListener = rikka.shizuku.Shizuku.OnRequestPermissionResultListener { _, _ ->
+        runOnUiThread {
+            onPermissionResult?.invoke()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        try {
+            rikka.shizuku.Shizuku.addRequestPermissionResultListener(permissionListener)
+        } catch (e: Throwable) {}
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
@@ -78,6 +94,18 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onResume() {
+        super.onResume()
+        onPermissionResult?.invoke()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            rikka.shizuku.Shizuku.removeRequestPermissionResultListener(permissionListener)
+        } catch (e: Throwable) {}
+    }
 }
 
 @OptIn(ExperimentalAnimationApi::class)
@@ -86,6 +114,17 @@ fun MainNavigationContainer(
     modifier: Modifier = Modifier,
     viewModel: OptimizerViewModel = viewModel()
 ) {
+    val context = LocalContext.current
+    DisposableEffect(context) {
+        val activity = context as? MainActivity
+        activity?.setOnPermissionResultCallback {
+            viewModel.detectPermissions()
+        }
+        onDispose {
+            activity?.setOnPermissionResultCallback(null)
+        }
+    }
+
     val activeTab by viewModel.activeTab.collectAsStateWithLifecycle()
     val privilegeMode by viewModel.privilegeMode.collectAsStateWithLifecycle()
 
@@ -1393,6 +1432,82 @@ fun SettingsScreen(viewModel: OptimizerViewModel) {
                             .testTag("emergency_rollback_button")
                     ) {
                         Text("DESFAZER TUDO (RESTAURAÇÃO COMPLETA)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+
+        // Shizuku Integration Panel
+        item {
+            val isShizukuRunning by viewModel.isShizukuRunning.collectAsStateWithLifecycle()
+            val hasShizukuPermission by viewModel.hasShizukuPermission.collectAsStateWithLifecycle()
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CyberSurface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        width = 1.dp,
+                        color = if (hasShizukuPermission) CyberTertiary.copy(alpha = 0.3f) else CyberWarning.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "PAINEL DE INTEGRAÇÃO SHIZUKU",
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = CyberPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    if (!isShizukuRunning) {
+                        Text(
+                            text = "Status: 🔴 DESCONECTADO (Mecanismo Shizuku não detectado).",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CyberWarning
+                        )
+                        Text(
+                            text = "Certifique-se de que o Shizuku está instalado e iniciado via Wi-Fi Debugging ou ADB em seu aparelho antes de tentar usar.",
+                            fontSize = 11.sp,
+                            color = TextSecondary,
+                            lineHeight = 16.sp
+                        )
+                    } else if (!hasShizukuPermission) {
+                        Text(
+                            text = "Status: 🟡 AUTORIZAÇÃO PENDENTE (O mecanismo está ativo, mas o app não autorizado).",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Yellow
+                        )
+                        Text(
+                            text = "Clique no botão abaixo para abrir a tela de autorização do Shizuku e conceder acesso.",
+                            fontSize = 11.sp,
+                            color = TextSecondary,
+                            lineHeight = 16.sp
+                        )
+                        Button(
+                            onClick = { viewModel.requestShizukuPermission() },
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberPrimary, contentColor = Color.Black),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("AUTORIZAR SHIZUKU AGORA", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+                    } else {
+                        Text(
+                            text = "Status: 🟢 CONECTADO E AUTORIZADO (Acesso via Shizuku ativo).",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = CyberTertiary
+                        )
+                        Text(
+                            text = "Todas as otimizações do sistema serão executadas de forma instantânea com privilégios de sistema.",
+                            fontSize = 11.sp,
+                            color = TextSecondary,
+                            lineHeight = 16.sp
+                        )
                     }
                 }
             }
